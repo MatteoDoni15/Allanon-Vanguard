@@ -1,0 +1,29 @@
+# Orchestration
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# LLM providers (Anthropic is the default; install `openai` only if you
+# switch LLM_PROVIDER=openai)
+anthropic>=0.40.0
+
+# SEO analysis
+textstat>=0.7.3
+python-slugify>=8.0.0
+markdown>=3.6
+
+# Internal linking (TF-IDF similarity)
+scikit-learn>=1.4.0
+
+# Vector index for the company-policy fact-check and semantic
+# duplicate-detection nodes (local mode -- no server to run)
+qdrant-client>=1.18.0
+
+# Publishing
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Config / env
+python-dotenv>=1.0.0
+
+# Tests
+pytest>=8.0.0

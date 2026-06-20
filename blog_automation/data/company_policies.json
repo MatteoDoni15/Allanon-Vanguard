@@ -1,0 +1,32 @@
+[
+  {
+    "doc_id": "fee-schedule-2026",
+    "title": "Account Fee Schedule",
+    "text": "Standard accounts carry no monthly maintenance fee. Instant transfers to an external bank are charged a flat fee of 1.50 EUR per transfer. Transfers between two accounts on our own platform are always free, with no minimum balance requirement. Overdraft usage is charged at 8.5% APR, calculated daily, only on the overdrawn amount."
+  },
+  {
+    "doc_id": "deposit-protection-2026",
+    "title": "Deposit Protection Statement",
+    "text": "Customer balances are protected up to 100,000 EUR per customer through the national deposit guarantee scheme, in line with EU Directive 2014/49/EU. This protection applies automatically and does not require customer enrollment. It covers the principal balance only, not any investment products held through the platform."
+  },
+  {
+    "doc_id": "marketing-claims-guidelines-2026",
+    "title": "Marketing & Content Claims Guidelines",
+    "text": "Any content referencing investment products must state that returns are not guaranteed and that past performance does not predict future results. Content must not describe any product as risk-free. Comparisons with named competitors must be factual and sourced, never disparaging. Promotional language implying urgency (e.g. limited-time offers) requires legal sign-off before publication."
+  },
+  {
+    "doc_id": "savings-product-terms-2026",
+    "title": "High-Yield Savings Product Terms",
+    "text": "The high-yield savings account offers a variable interest rate, currently 3.2% APY, reviewed monthly and subject to change without prior notice. Interest is accrued daily and paid out monthly. There is no fee for opening or closing the account, and no minimum balance is required to earn the advertised rate."
+  },
+  {
+    "doc_id": "credit-score-data-policy-2026",
+    "title": "Credit Score & Data Sharing Policy",
+    "text": "We do not sell customer transaction data to third parties for marketing purposes. Credit score estimates shown in the app are illustrative, sourced from a third-party bureau, and may differ from the score a lender actually uses. Customers can opt out of credit score tracking at any time from account settings."
+  },
+  {
+    "doc_id": "complaint-handling-2026",
+    "title": "Complaint Handling & Escalation",
+    "text": "Customer complaints are acknowledged within 2 business days and resolved within 15 business days under normal circumstances, in line with applicable consumer protection regulation. Complaints involving suspected fraud are escalated immediately to the fraud team and are not subject to the standard 15-day window."
+  }
+]

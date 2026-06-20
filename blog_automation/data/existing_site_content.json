@@ -1,0 +1,72 @@
+[
+  {
+    "id": "post-101",
+    "title": "How to Build an Emergency Fund From Scratch",
+    "url": "/blog/build-emergency-fund-from-scratch",
+    "summary": "A step-by-step guide to setting savings targets, choosing the right account type, and automating monthly transfers to build a 3-6 month emergency fund.",
+    "tags": ["savings", "emergency fund", "budgeting"]
+  },
+  {
+    "id": "post-102",
+    "title": "Index Funds vs ETFs: What's the Difference?",
+    "url": "/blog/index-funds-vs-etfs-difference",
+    "summary": "Explains expense ratios, tax efficiency, trading mechanics, and liquidity differences between index mutual funds and ETFs for long-term investors.",
+    "tags": ["investing", "etf", "index funds"]
+  },
+  {
+    "id": "post-103",
+    "title": "Understanding Your Credit Score: A Complete Guide",
+    "url": "/blog/understanding-credit-score-guide",
+    "summary": "Breaks down the five factors that make up a FICO score and practical steps to improve payment history, utilization, and credit mix.",
+    "tags": ["credit score", "credit cards", "debt"]
+  },
+  {
+    "id": "post-104",
+    "title": "Roth IRA vs Traditional IRA: Which One Fits Your Goals",
+    "url": "/blog/roth-vs-traditional-ira",
+    "summary": "Compares tax treatment, contribution limits, withdrawal rules, and income eligibility for Roth and Traditional IRAs.",
+    "tags": ["retirement", "ira", "tax planning"]
+  },
+  {
+    "id": "post-105",
+    "title": "A Beginner's Guide to Budgeting with the 50/30/20 Rule",
+    "url": "/blog/50-30-20-budgeting-rule-guide",
+    "summary": "Walks through allocating after-tax income into needs, wants, and savings/debt repayment using the popular 50/30/20 framework.",
+    "tags": ["budgeting", "personal finance basics"]
+  },
+  {
+    "id": "post-106",
+    "title": "How Compound Interest Works (With Real Examples)",
+    "url": "/blog/how-compound-interest-works",
+    "summary": "Uses worked examples and a simple formula to show how compounding frequency and time horizon affect long-term investment growth.",
+    "tags": ["investing", "compound interest", "savings"]
+  },
+  {
+    "id": "post-107",
+    "title": "High-Yield Savings Accounts: What to Look for in 2026",
+    "url": "/blog/high-yield-savings-accounts-guide",
+    "summary": "Covers APY comparisons, FDIC insurance limits, withdrawal restrictions, and how online banks keep rates competitive.",
+    "tags": ["savings", "banking", "interest rates"]
+  },
+  {
+    "id": "post-108",
+    "title": "Debt Snowball vs Debt Avalanche: Which Pays Off Debt Faster",
+    "url": "/blog/debt-snowball-vs-avalanche",
+    "summary": "Compares the psychological and mathematical trade-offs of the two most common debt repayment strategies.",
+    "tags": ["debt", "credit cards", "budgeting"]
+  },
+  {
+    "id": "post-109",
+    "title": "What Is Dollar-Cost Averaging and Does It Actually Work?",
+    "url": "/blog/dollar-cost-averaging-explained",
+    "summary": "Explains the mechanics of investing fixed amounts on a schedule and reviews the research on DCA versus lump-sum investing.",
+    "tags": ["investing", "etf", "index funds"]
+  },
+  {
+    "id": "post-110",
+    "title": "How to Read Your Loan Amortization Schedule",
+    "url": "/blog/loan-amortization-schedule-explained",
+    "summary": "Shows how monthly payments split between principal and interest over the life of a mortgage or personal loan.",
+    "tags": ["loans", "mortgage", "debt"]
+  }
+]
