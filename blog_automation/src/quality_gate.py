@@ -24,17 +24,22 @@ Both checks must pass for a post to qualify for auto-publish.
 from __future__ import annotations
 
 from config import settings
+from src.logging_config import get_logger
 from src.state import PipelineState
 from src.importance_tagger import rescan_importance_in_text
 
+logger = get_logger("quality_gate")
+
 
 def run_quality_gate(state: PipelineState) -> dict:
+    logger.info("Running quality gate checks")
     text = state["linked_markdown"].lower()
     reasons: list[str] = []
 
     # 1. Compliance: banned/risky financial-promotion language.
     found_banned = [p for p in settings.banned_phrases if p in text]
     if found_banned:
+        logger.warning(f"Quality check: banned phrases found: {found_banned}")
         reasons.append(
             "Contains non-compliant financial language: " + ", ".join(found_banned)
         )
@@ -42,6 +47,7 @@ def run_quality_gate(state: PipelineState) -> dict:
     # 2. SEO score threshold (reuses the seo_optimizer's score).
     seo_score = state["seo_report"]["score"]
     if seo_score < settings.min_seo_score_to_publish:
+        logger.warning(f"Quality check: SEO score {seo_score} < {settings.min_seo_score_to_publish}")
         reasons.append(
             f"SEO score {seo_score} is below the publish threshold "
             f"({settings.min_seo_score_to_publish}). "
@@ -50,34 +56,40 @@ def run_quality_gate(state: PipelineState) -> dict:
 
     # 3. Minimum structural sanity (defends against an empty/degenerate draft).
     if state["seo_report"]["word_count"] < 200:
+        logger.warning("Quality check: Draft too short")
         reasons.append("Draft is too short to be a real article (possible generation failure).")
 
-    # 4. Compliance judge verdict (Part 3, proposal 1 -- run_compliance_judge,
-    #    a separate LangGraph node feeding into the same `compliance` field).
+    # 4. Compliance judge verdict
     compliance = state.get("compliance", {"passed": True, "reasons": []})
     if not compliance.get("passed", True):
+        logger.warning(f"Quality check: Compliance judge failed: {compliance.get('reasons')}")
         reasons.extend(compliance.get("reasons", []))
 
-    # 5. Lightweight policy fact-check (Part 3, proposal 2 -- run_policy_fact_check).
+    # 5. Lightweight policy fact-check
     fact_check = state.get("fact_check", {"passed": True, "reasons": []})
     if not fact_check.get("passed", True):
+        logger.warning(f"Quality check: Policy fact-check failed: {fact_check.get('reasons')}")
         reasons.extend(fact_check.get("reasons", []))
 
-    # 5b. External web fact-check via DuckDuckGo (run_web_fact_check).
+    # 5b. External web fact-check
     web_fact_check = state.get("web_fact_check", {"passed": True, "reasons": []})
     if not web_fact_check.get("passed", True):
+        logger.warning(f"Quality check: Web fact-check failed: {web_fact_check.get('reasons')}")
         reasons.extend(web_fact_check.get("reasons", []))
 
-    # 6. Semantic duplicate check against published posts (Part 3, proposal 5).
+    # 6. Semantic duplicate check
     duplicate_check = state.get("duplicate_check", {"passed": True, "reasons": []})
     if not duplicate_check.get("passed", True):
+        logger.warning(f"Quality check: Duplicate check failed: {duplicate_check.get('reasons')}")
         reasons.extend(duplicate_check.get("reasons", []))
 
     quality_passed = len(reasons) == 0
-
-    # Safety-net re-check: a sensitive subject can show up inside the
-    # generated text even when the keyword itself looked routine.
     importance_tier = rescan_importance_in_text(text, state.get("importance_tier", "standard"))
+
+    if quality_passed:
+        logger.info("Quality gate: All checks passed")
+    else:
+        logger.warning(f"Quality gate: {len(reasons)} issue(s) found")
 
     return {
         "quality": {"passed": quality_passed, "reasons": reasons},
@@ -91,12 +103,14 @@ def route_after_quality_gate(state: PipelineState) -> str:
 
     if not quality_passed:
         if state.get("retries", 0) < settings.max_generation_retries:
+            logger.info(f"Quality check failed - routing to retry (attempt {state.get('retries', 0) + 1})")
             return "retry"
+        logger.warning(f"Quality check failed after {state.get('retries', 0)} retries - routing to needs_review")
         return "needs_review"
 
-    # Quality is fine on its own merits; the importance axis can still
-    # require a human, independently of draft quality.
     if state.get("importance_tier", "standard") == "high":
+        logger.info("Quality passed, but importance tier is HIGH - routing to needs_review")
         return "needs_review"
 
+    logger.info("Quality passed - routing to publish")
     return "publish"

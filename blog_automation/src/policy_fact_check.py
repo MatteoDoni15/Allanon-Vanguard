@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import re
 
+from src.logging_config import get_logger
 from src.state import PipelineState
 from src.vector_index import get_knowledge_base_index
+
+logger = get_logger("policy_fact_check")
 
 # A draft sentence is treated as a "claim" worth checking if it contains
 # a number-like token (rates, fees, amounts) or one of these terms --
@@ -60,34 +63,48 @@ _CONTRADICTION_CUES: dict[str, tuple[str, ...]] = {
 
 
 def run_policy_fact_check(state: PipelineState) -> dict:
+    logger.info("Running policy fact-check against company guidelines")
     text = state["linked_markdown"]
     claims = _extract_claim_sentences(text)
 
+    if not claims:
+        logger.info("No claims to fact-check")
+        return {"fact_check": {"passed": True, "reasons": []}}
+
+    logger.info(f"Extracted {len(claims)} claims to verify against policies")
     index = get_knowledge_base_index()
     reasons: list[str] = []
-    for claim in claims:
+    for i, claim in enumerate(claims, 1):
+        logger.info(f"Checking claim {i}/{len(claims)}: '{claim[:80]}...'")
         matches = index.query_policies(claim, top_k=3)
         if not matches:
+            logger.warning(f"Claim {i}: No matching policy found")
             reasons.append(f"Claim not clearly grounded in company policy (no policy retrieved): \u201c{claim.strip()}\u201d")
             continue
 
-        # A contradiction can show up in any of the top few retrieved
-        # passages, not necessarily the single highest-scoring one --
-        # raw similarity can rank a topically-close but irrelevant policy
-        # above the one that actually prohibits this specific claim.
         contradicted_by = next((m for m in matches if _contradicts(claim, m.get("text", ""))), None)
         if contradicted_by:
+            logger.warning(f"Claim {i}: Contradicts policy '{contradicted_by.get('title')}'")
             reasons.append(
                 f"Claim appears to contradict company policy \u201c{contradicted_by.get('title')}\u201d: "
                 f"\u201c{claim.strip()}\u201d"
             )
         elif matches[0]["score"] < MIN_GROUNDING_SCORE:
+            logger.warning(f"Claim {i}: Weak match score {matches[0]['score']:.2f}")
             reasons.append(
                 f"Claim not clearly grounded in company policy (best match "
                 f"score {matches[0]['score']:.2f}): \u201c{claim.strip()}\u201d"
             )
+        else:
+            logger.info(f"Claim {i}: Verified (score {matches[0]['score']:.2f})")
 
-    return {"fact_check": {"passed": len(reasons) == 0, "reasons": reasons}}
+    passed = len(reasons) == 0
+    if passed:
+        logger.info("Policy fact-check: PASSED")
+    else:
+        logger.warning(f"Policy fact-check: FAILED - {len(reasons)} issue(s)")
+
+    return {"fact_check": {"passed": passed, "reasons": reasons}}
 
 
 def _contradicts(claim: str, policy_text: str) -> bool:

@@ -45,8 +45,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from config import settings
+from src.logging_config import configure_logging, get_logger
 from server import db
 from src.pipeline_graph import NODE_LABELS, NODE_ORDER, stream_for_keyword
+
+configure_logging()
+logger = get_logger("server")
 
 app = FastAPI(title="Blog Automation API")
 
@@ -85,22 +89,28 @@ class GenerateRequest(BaseModel):
 
 def _apply_provider(req: GenerateRequest) -> None:
     """Point the global settings (and API-key env vars) at the chosen provider."""
+    logger.info(f"Applying provider configuration: {req.provider}")
     settings.llm_provider = req.provider
     if req.provider == "ollama":
         if req.ollama_url:
+            logger.info(f"Setting Ollama base URL: {req.ollama_url}")
             settings.ollama_base_url = req.ollama_url
         if req.model:
-            # The content model is the one that actually writes the post.
+            logger.info(f"Setting Ollama content model: {req.model}")
             settings.ollama_content_model = req.model
     elif req.provider == "anthropic":
         if req.model:
+            logger.info(f"Setting Anthropic model: {req.model}")
             settings.anthropic_model = req.model
         if req.api_key:
+            logger.info("Setting Anthropic API key from request")
             os.environ["ANTHROPIC_API_KEY"] = req.api_key
     elif req.provider == "openai":
         if req.model:
+            logger.info(f"Setting OpenAI model: {req.model}")
             settings.openai_model = req.model
         if req.api_key:
+            logger.info("Setting OpenAI API key from request")
             os.environ["OPENAI_API_KEY"] = req.api_key
 
 
@@ -129,6 +139,7 @@ def _node_event(node: str, update: dict, state: dict) -> dict:
 
 def _run_job(job_id: str, req: GenerateRequest) -> None:
     q = _JOBS[job_id]
+    logger.info(f"Job {job_id}: Starting generation for keyword '{req.keyword}'")
     try:
         with _GEN_LOCK:
             _apply_provider(req)
@@ -138,21 +149,26 @@ def _run_job(job_id: str, req: GenerateRequest) -> None:
                    "total": len(NODE_ORDER)})
 
             def on_node(node: str, update: dict, state: dict) -> None:
+                logger.info(f"Job {job_id}: Node '{node}' completed")
                 q.put(_node_event(node, update, state))
 
+            logger.info(f"Job {job_id}: Starting pipeline execution")
             state = stream_for_keyword(
                 req.keyword, target_audience=req.target_audience, on_node=on_node
             )
             blog_id = db.save_blog(state, provider=req.provider, model=req.model)
+            status = state.get("status")
+            logger.info(f"Job {job_id}: Pipeline complete - status={status}, blog_id={blog_id}")
             q.put({
                 "type": "done",
                 "blog_id": blog_id,
                 "url": f"/blog_{blog_id}",
-                "status": state.get("status"),
+                "status": status,
                 "title": state.get("title"),
                 "seo_score": (state.get("seo_report") or {}).get("score"),
             })
-    except Exception as exc:  # surface any failure to the browser, don't crash the server
+    except Exception as exc:
+        logger.error(f"Job {job_id}: Error during generation - {str(exc)}", exc_info=True)
         q.put({"type": "error", "message": str(exc)})
     finally:
         q.put(None)
@@ -160,16 +176,20 @@ def _run_job(job_id: str, req: GenerateRequest) -> None:
 
 @app.get("/api/providers")
 def get_providers() -> dict:
+    logger.info("API: Fetching available providers")
     return {"providers": PROVIDERS, "current": settings.llm_provider}
 
 
 @app.post("/api/generate")
 def generate(req: GenerateRequest) -> dict:
     if req.provider not in PROVIDERS:
+        logger.warning(f"API: Invalid provider requested: {req.provider}")
         raise HTTPException(400, f"Unknown provider '{req.provider}'")
     if not req.keyword.strip():
+        logger.warning("API: Empty keyword provided")
         raise HTTPException(400, "Keyword is required")
     job_id = uuid.uuid4().hex
+    logger.info(f"API: Creating job {job_id} for keyword '{req.keyword}' with provider={req.provider}")
     _JOBS[job_id] = queue.Queue()
     threading.Thread(target=_run_job, args=(job_id, req), daemon=True).start()
     return {"job_id": job_id}
@@ -205,24 +225,32 @@ async def stream_job(job_id: str) -> StreamingResponse:
 
 @app.get("/api/blogs")
 def get_blogs() -> dict:
+    logger.info("API: Fetching all blogs")
     return {"blogs": db.list_blogs()}
 
 
 @app.get("/api/blogs/{blog_id}")
 def get_blog(blog_id: int) -> dict:
+    logger.info(f"API: Fetching blog {blog_id}")
     blog = db.get_blog(blog_id)
     if blog is None:
+        logger.warning(f"API: Blog {blog_id} not found")
         raise HTTPException(404, "Blog not found")
     return blog
 
 
 @app.delete("/api/blogs/{blog_id}")
 def remove_blog(blog_id: int) -> dict:
+    logger.info(f"API: Deleting blog {blog_id}")
     if not db.delete_blog(blog_id):
+        logger.warning(f"API: Blog {blog_id} not found for deletion")
         raise HTTPException(404, "Blog not found")
+    logger.info(f"API: Successfully deleted blog {blog_id}")
     return {"deleted": blog_id}
 
 
 @app.on_event("startup")
 def _startup() -> None:
+    logger.info("Server: Initializing database")
     db.init_db()
+    logger.info("Server: Application startup complete")

@@ -21,11 +21,15 @@ import textstat
 from slugify import slugify
 
 from config import settings
+from src.logging_config import get_logger
 from src.state import PipelineState, SEOReport
+
+logger = get_logger("seo_optimizer")
 
 
 def analyze_and_optimize(state: PipelineState) -> dict:
     """LangGraph node: reads `raw_markdown`, returns `seo_report` + `optimized_markdown`."""
+    logger.info("Analyzing SEO metrics")
     markdown = state["raw_markdown"]
     keyword = state["keyword"]
     title = state["title"]
@@ -36,24 +40,31 @@ def analyze_and_optimize(state: PipelineState) -> dict:
     h2_count = len(re.findall(r"^##\s+", markdown, flags=re.MULTILINE))
     h1_count = len(re.findall(r"^#\s+", markdown, flags=re.MULTILINE))
 
+    logger.info(f"SEO metrics - words: {word_count}, flesch: {flesch:.1f}, density: {density:.2f}%, H1: {h1_count}, H2: {h2_count}")
+
     issues: list[str] = []
     suggestions: list[str] = []
 
     if word_count < settings.min_word_count:
+        logger.warning(f"SEO: Word count {word_count} below minimum {settings.min_word_count}")
         issues.append(f"Word count {word_count} is below the {settings.min_word_count} minimum.")
         suggestions.append("Expand one or two H2 sections with a concrete example.")
     if word_count > settings.max_word_count:
+        logger.warning(f"SEO: Word count {word_count} exceeds maximum {settings.max_word_count}")
         issues.append(f"Word count {word_count} exceeds the {settings.max_word_count} maximum.")
         suggestions.append("Trim repetitive sentences in the middle sections.")
 
     if density < settings.target_keyword_density_min:
+        logger.warning(f"SEO: Keyword density {density:.2f}% too low")
         issues.append(f"Keyword density {density:.2f}% is too low.")
         suggestions.append(f"Mention '{keyword}' a couple more times naturally.")
     elif density > settings.target_keyword_density_max:
+        logger.warning(f"SEO: Keyword density {density:.2f}% too high (stuffing risk)")
         issues.append(f"Keyword density {density:.2f}% risks keyword stuffing.")
         suggestions.append(f"Replace some repetitions of '{keyword}' with synonyms.")
 
     if flesch < settings.min_flesch_reading_ease:
+        logger.warning(f"SEO: Flesch score {flesch:.1f} below readability threshold")
         issues.append(f"Flesch Reading Ease {flesch:.1f} is hard to read for a general audience.")
         suggestions.append("Shorten long sentences and prefer plain-English words.")
 
@@ -75,6 +86,8 @@ def analyze_and_optimize(state: PipelineState) -> dict:
         meta_ok=bool(meta_title and meta_description),
     )
 
+    logger.info(f"SEO score: {score}/100" + (f" - {len(issues)} issue(s) found" if issues else " - all checks passed"))
+
     report: SEOReport = {
         "score": score,
         "word_count": word_count,
@@ -89,8 +102,6 @@ def analyze_and_optimize(state: PipelineState) -> dict:
         "suggestions": suggestions,
     }
 
-    # Inject the meta block as Markdown front matter so downstream steps
-    # (internal linking, publishing) carry SEO metadata with the content.
     optimized_markdown = (
         f"<!--\n"
         f"meta_title: {meta_title}\n"

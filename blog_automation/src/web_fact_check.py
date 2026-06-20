@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import re
 
+from src.logging_config import get_logger
 from src.state import PipelineState
+
+logger = get_logger("web_fact_check")
 
 _CLAIM_TERMS = (
     "guarantee", "guaranteed", "risk-free", "zero risk", "fdic",
@@ -33,27 +36,41 @@ _MAX_CLAIMS_TO_SEARCH = 3
 
 
 def run_web_fact_check(state: PipelineState) -> dict:
+    logger.info("Running web fact-check")
     text = state["linked_markdown"]
     claims = _extract_claim_sentences(text)[:_MAX_CLAIMS_TO_SEARCH]
 
     if not claims:
+        logger.info("No fact-checkable claims found")
         return {"web_fact_check": {"passed": True, "reasons": []}}
 
+    logger.info(f"Extracted {len(claims)} fact-checkable claim(s) to verify")
     reasons: list[str] = []
     try:
         from ddgs import DDGS
         with DDGS() as ddgs:
-            for claim in claims:
+            for i, claim in enumerate(claims, 1):
+                logger.info(f"Verifying claim {i}/{len(claims)}: '{claim[:80]}...'")
                 results = ddgs.text(claim[:120], max_results=3)
                 if not results:
+                    logger.warning(f"Claim {i} unverifiable - no web results")
                     reasons.append(
                         f"Claim returned no external search results (unverifiable): "
                         f"“{claim.strip()}”"
                     )
-    except Exception:
+                else:
+                    logger.info(f"Claim {i} verified - found {len(results)} web result(s)")
+    except Exception as e:
+        logger.warning(f"Web fact-check failed: {str(e)} - continuing without verification")
         return {"web_fact_check": {"passed": True, "reasons": []}}
 
-    return {"web_fact_check": {"passed": len(reasons) == 0, "reasons": reasons}}
+    passed = len(reasons) == 0
+    if passed:
+        logger.info("Web fact-check: PASSED")
+    else:
+        logger.warning(f"Web fact-check: FAILED - {len(reasons)} unverifiable claim(s)")
+
+    return {"web_fact_check": {"passed": passed, "reasons": reasons}}
 
 
 def _extract_claim_sentences(text: str) -> list[str]:

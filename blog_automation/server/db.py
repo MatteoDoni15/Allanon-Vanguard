@@ -115,8 +115,107 @@ def get_blog(blog_id: int) -> dict[str, Any] | None:
     if row is None:
         return None
     data = dict(row)
-    data["state"] = json.loads(data.pop("state_json") or "{}")
+    state = json.loads(data.pop("state_json") or "{}")
+    data["state"] = state
+    # Surface every pipeline node's output as an ordered, display-friendly list
+    # so the frontend can show what each step produced (web-research snippets,
+    # SEO findings, fact-check reasons, ...) -- not just the final post. Built
+    # on read from the already-persisted state, so it also works for older rows.
+    data["steps"] = _build_pipeline_steps(state)
     return data
+
+
+def _fmt_score(value: Any) -> str:
+    return f"{value:.2f}" if isinstance(value, (int, float)) else str(value)
+
+
+def _build_pipeline_steps(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the saved pipeline state into an ordered list of per-step outputs.
+
+    Each step is ``{key, label, summary?, status?, text?, items?}`` where
+    ``status`` is ``"pass"``/``"fail"`` for the check nodes, ``text`` is a long
+    free-text block (web research, the raw draft) and ``items`` is a bullet list
+    (SEO findings, internal links, fact-check reasons). The frontend renders any
+    of these generically.
+    """
+    seo = state.get("seo_report") or {}
+    links = state.get("internal_links") or []
+
+    def _check(res: Any) -> tuple[str | None, list[str]]:
+        if not isinstance(res, dict):
+            return None, []
+        status = "pass" if res.get("passed", True) else "fail"
+        return status, [str(r) for r in (res.get("reasons") or [])]
+
+    steps: list[dict[str, Any]] = [
+        {
+            "key": "web_research",
+            "label": "🌐 Ricerca Web",
+            "summary": "Snippet recuperati da internet (DuckDuckGo) e usati come contesto.",
+            "text": (state.get("web_research_context") or "").strip(),
+        },
+        {
+            "key": "generate_content",
+            "label": "✍️ Generazione contenuto",
+            "summary": f"Titolo: {state.get('title') or '—'} · {state.get('retries', 0)} retry",
+            "text": (state.get("raw_markdown") or "").strip(),
+        },
+        {
+            "key": "seo_optimize",
+            "label": "📊 Ottimizzazione SEO",
+            "summary": (
+                f"Score {seo.get('score', '—')}/100 · {seo.get('word_count', '—')} parole · "
+                f"Flesch {seo.get('flesch_reading_ease', '—')} · "
+                f"density {seo.get('keyword_density_pct', '—')}%"
+            ),
+            "items": list(seo.get("issues") or []) + list(seo.get("suggestions") or []),
+        },
+        {
+            "key": "internal_linking",
+            "label": "🔗 Link interni",
+            "summary": f"{len(links)} link suggeriti",
+            "items": [
+                f"{lk.get('anchor_text')} → {lk.get('target_url')} (sim. {_fmt_score(lk.get('similarity'))})"
+                for lk in links
+            ],
+        },
+    ]
+
+    for key, label, res in [
+        ("compliance", "⚖️ Compliance Judge", state.get("compliance")),
+        ("fact_check", "📋 Policy Fact-Check", state.get("fact_check")),
+        ("web_fact_check", "🔍 Web Fact-Check", state.get("web_fact_check")),
+        ("duplicate_check", "🔁 Duplicate Check", state.get("duplicate_check")),
+        ("quality", "🚦 Quality Gate", state.get("quality")),
+    ]:
+        status, reasons = _check(res)
+        step = {"key": key, "label": label, "status": status, "items": reasons}
+        if key == "duplicate_check" and isinstance(res, dict):
+            matches = res.get("matches") or []
+            step["items"] = step["items"] + [
+                f"Simile: {m.get('title')} ({_fmt_score(m.get('score'))}) {m.get('url', '')}".strip()
+                for m in matches
+            ]
+        steps.append(step)
+
+    pub_items: list[str] = []
+    if state.get("ai_disclosure"):
+        pub_items.append(f"AI disclosure: {state['ai_disclosure']}")
+    if state.get("canonical_url"):
+        pub_items.append(f"Canonical URL: {state['canonical_url']}")
+    if state.get("scheduled_publish_at"):
+        pub_items.append(f"Programmato per: {state['scheduled_publish_at']}")
+    pub_url = (state.get("publish_result") or {}).get("url")
+    if pub_url:
+        pub_items.append(f"File: {pub_url}")
+    steps.append({
+        "key": "publish",
+        "label": "🚀 Pubblicazione",
+        "summary": f"Stato finale: {state.get('status', '—')}",
+        "items": pub_items,
+    })
+
+    return steps
 
 
 def delete_blog(blog_id: int) -> bool:

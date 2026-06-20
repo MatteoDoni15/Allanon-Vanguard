@@ -62,6 +62,7 @@ from typing import Callable
 
 from langgraph.graph import StateGraph, END
 
+from src.logging_config import get_logger
 from src.state import PipelineState
 from src.content_generator import generate_content
 from src.seo_optimizer import analyze_and_optimize
@@ -76,22 +77,27 @@ from src.publisher import publish, write_review_packet
 from src.importance_tagger import tag_importance_from_keyword
 from src.voice_profiles import assign_voice_profile
 
+logger = get_logger("pipeline")
+
 
 def _increment_retries(state: PipelineState) -> dict:
     """Tiny node used only on the retry path so `retries` increases each loop."""
-    return {"retries": state.get("retries", 0) + 1}
+    new_retry_count = state.get("retries", 0) + 1
+    logger.info(f"Retrying content generation (attempt {new_retry_count})")
+    return {"retries": new_retry_count}
 
 
 def _needs_review(state: PipelineState) -> dict:
+    logger.warning(f"Routing to human review - importance_tier={state.get('importance_tier')}, retries={state.get('retries')}")
     review_fields = write_review_packet(state)
     return {**review_fields, "status": "needs_review"}
 
 
 def _publish_and_index(state: PipelineState) -> dict:
+    logger.info(f"Publishing post: '{state.get('title')}'")
     result = publish(state)
-    # Incremental: only a genuinely auto-published post is added to the
-    # published_posts collection, so later drafts get checked against it.
     index_published_post({**state, **result})
+    logger.info(f"Post published and indexed successfully")
     return result
 
 
@@ -180,23 +186,22 @@ def _recursion_limit() -> int:
 
 
 def _initial_state(keyword: str, target_audience: str) -> PipelineState:
+    importance = tag_importance_from_keyword(keyword)
+    voice = assign_voice_profile(keyword)
+    logger.info(f"Initializing pipeline state - keyword='{keyword}', importance={importance}, voice={voice}")
     return {
         "keyword": keyword,
         "target_audience": target_audience,
         "retries": 0,
-        # Tagged once here, at "keyword input" -- both stay fixed across
-        # retries, the same way a topic's sensitivity and a writer's
-        # style do not change between draft attempts.
-        "importance_tier": tag_importance_from_keyword(keyword),
-        "voice_profile": assign_voice_profile(keyword),
+        "importance_tier": importance,
+        "voice_profile": voice,
     }
 
 
 def run_for_keyword(keyword: str, target_audience: str = "general retail banking customers") -> PipelineState:
     """Convenience entry point: runs the full graph for one keyword."""
+    logger.info(f"Starting pipeline run: keyword='{keyword}'")
     app = build_pipeline_graph()
-    # recursion_limit guards against any unexpected infinite loop in the
-    # retry edge; max_generation_retries already bounds it logically.
     return app.invoke(
         _initial_state(keyword, target_audience),
         config={"recursion_limit": _recursion_limit()},
@@ -217,6 +222,7 @@ def stream_for_keyword(
     into a running copy of the state ourselves (updates mode does not carry
     the full state), so the returned object matches ``run_for_keyword``.
     """
+    logger.info(f"Starting streaming pipeline run: keyword='{keyword}'")
     app = build_pipeline_graph()
     state: PipelineState = dict(_initial_state(keyword, target_audience))
     for chunk in app.stream(state, config={"recursion_limit": _recursion_limit()}, stream_mode="updates"):
@@ -225,4 +231,5 @@ def stream_for_keyword(
                 state.update(update)
             if on_node is not None:
                 on_node(node_name, update or {}, state)
+    logger.info(f"Pipeline execution complete for keyword='{keyword}' - final status={state.get('status')}")
     return state

@@ -12,10 +12,13 @@ the fact.
 from __future__ import annotations
 
 from config import settings
+from src.logging_config import get_logger
 from src.state import PipelineState
 from src.llm_providers import get_llm_provider
 from src.voice_profiles import get_voice_directive
 from src.token_budget import compress_to_budget, estimate_tokens, truncate_to_budget
+
+logger = get_logger("content_generator")
 
 SYSTEM_PROMPT_TEMPLATE = """\
 You are a senior content writer for {company}, a company in the \
@@ -53,14 +56,14 @@ keyword above. Include:
 
 def generate_content(state: PipelineState) -> dict:
     """LangGraph node: produces `raw_markdown` and `title` from `keyword`."""
+    logger.info(f"Generating content for keyword: '{state['keyword']}'")
     provider = get_llm_provider(task="content")
+    logger.info(f"Using LLM provider for content generation")
 
     revision_note = ""
     if state.get("quality", {}).get("reasons"):
-        # Loop-back path: the quality gate rejected the previous draft.
-        # Feed its reasons back into the prompt so the regenerated draft
-        # specifically addresses them (this is the LangGraph retry edge).
         reasons = "; ".join(state["quality"]["reasons"])
+        logger.warning(f"Regenerating due to quality issues: {reasons}")
         revision_note = (
             f"IMPORTANT: a previous draft was rejected for these reasons: "
             f"{reasons}. Fix these specifically in this new draft."
@@ -106,8 +109,10 @@ def generate_content(state: PipelineState) -> dict:
     if overflow > 0:
         user_prompt = truncate_to_budget(user_prompt, estimate_tokens(user_prompt) - overflow)
 
+    logger.info(f"Calling LLM to generate content")
     markdown = provider.generate(system_prompt, user_prompt)
     title = _extract_title(markdown, fallback=state["keyword"].title())
+    logger.info(f"Content generated successfully - title: '{title}', length: {len(markdown)} chars")
 
     return {
         "raw_markdown": markdown,

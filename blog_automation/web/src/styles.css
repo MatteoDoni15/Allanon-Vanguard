@@ -140,6 +140,7 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.green, .badge.green { background: var(--green); }
 .dot.yellow, .badge.yellow { background: var(--yellow); }
+.badge.red { background: var(--red); color: #fff; }
 .link-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
 .link-btn:hover { color: var(--red); }
 
@@ -160,3 +161,51 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .kv span { color: var(--muted); }
 .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .checks li.fail { color: var(--red); }
+
+/* ── pipeline steps (intermediate outputs) ── */
+.steps-panel { margin-top: 16px; }
+.steps { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.step {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+}
+.step > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.step > summary::-webkit-details-marker { display: none; }
+.step > summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.step[open] > summary::before { transform: rotate(90deg); }
+.step > summary:hover { background: #262b35; }
+.step-label { font-weight: 500; }
+.step > summary .badge { margin-left: auto; }
+.step-body { padding: 0 12px 12px 12px; border-top: 1px solid var(--border); }
+.step-summary { font-size: 12px; margin: 10px 0; }
+.step-text {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 360px;
+  overflow: auto;
+  color: var(--text);
+}
+.step-items { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.step-items li { margin-bottom: 3px; word-break: break-word; }

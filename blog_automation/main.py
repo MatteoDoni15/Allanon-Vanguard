@@ -17,7 +17,10 @@ import argparse
 import sys
 
 from config import settings
+from src.logging_config import configure_logging, get_logger
 from src.pipeline_graph import run_for_keyword
+
+logger = get_logger("main")
 
 DEMO_KEYWORDS = [
     "how to start investing",
@@ -27,6 +30,9 @@ DEMO_KEYWORDS = [
 
 
 def main():
+    configure_logging()
+    logger.info(f"Starting blog automation pipeline (LLM_PROVIDER={settings.llm_provider})")
+
     parser = argparse.ArgumentParser(description="Run the automated blog pipeline.")
     parser.add_argument("keywords", nargs="*", help="One or more target keywords.")
     parser.add_argument("--file", help="Path to a text file with one keyword per line.")
@@ -34,16 +40,17 @@ def main():
 
     keywords = list(args.keywords)
     if args.file:
+        logger.info(f"Reading keywords from file: {args.file}")
         with open(args.file, "r", encoding="utf-8") as f:
             keywords += [line.strip() for line in f if line.strip()]
     if not keywords:
         keywords = DEMO_KEYWORDS
-        print(f"No keywords supplied -- running {len(keywords)} demo keywords "
-              f"(LLM_PROVIDER={settings.llm_provider}).\n")
+        logger.info(f"No keywords supplied -- running {len(keywords)} demo keywords")
 
+    logger.info(f"Processing {len(keywords)} keyword(s)")
     results = []
-    for kw in keywords:
-        print(f"--- Running pipeline for: '{kw}' ---")
+    for i, kw in enumerate(keywords, 1):
+        logger.info(f"[{i}/{len(keywords)}] Running pipeline for: '{kw}'")
         state = run_for_keyword(kw)
         results.append(state)
         _print_summary(state)
@@ -51,8 +58,7 @@ def main():
 
     published = sum(1 for r in results if r.get("status") == "published")
     needs_review = sum(1 for r in results if r.get("status") == "needs_review")
-    print(f"Done. {published} published, {needs_review} sent to human review, "
-          f"out of {len(results)} keyword(s).")
+    logger.info(f"Pipeline complete: {published} published, {needs_review} needs review, {len(results)} total")
 
 
 def _print_summary(state: dict) -> None:
