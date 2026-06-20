@@ -22,6 +22,7 @@ import json
 from config import settings
 from src.state import PipelineState
 from src.llm_providers import get_llm_provider
+from src.token_budget import estimate_tokens, chunk_by_tokens
 
 COMPLIANCE_SYSTEM_PROMPT = """\
 You are a compliance reviewer for a FinTech company's marketing blog. \
@@ -44,13 +45,44 @@ DRAFT_TO_REVIEW:
 
 def run_compliance_judge(state: PipelineState) -> dict:
     """LangGraph node: reads `linked_markdown`, returns `compliance`."""
-    provider = get_llm_provider()
-    user_prompt = COMPLIANCE_USER_TEMPLATE.format(
-        guidelines=settings.compliance_guidelines,
-        draft=state["linked_markdown"],
-    )
-    raw = provider.generate(COMPLIANCE_SYSTEM_PROMPT, user_prompt)
-    return {"compliance": _parse_judge_response(raw)}
+    provider = get_llm_provider(task="compliance")
+    draft = state["linked_markdown"]
+
+    # Unlike the web-research context, the draft is NOT summarised to fit the
+    # budget: a summary could quietly drop the exact phrase a compliance check
+    # exists to catch. Instead, an over-budget draft is chunked and each chunk
+    # judged on its own, then the verdicts are merged (fails if ANY chunk
+    # fails). This keeps every word in front of the judge while still bounding
+    # the per-call input size.
+    if estimate_tokens(draft) <= settings.max_compliance_draft_tokens:
+        parts = [draft]
+    else:
+        parts = chunk_by_tokens(draft, settings.max_compliance_draft_tokens)
+
+    results = []
+    for part in parts:
+        user_prompt = COMPLIANCE_USER_TEMPLATE.format(
+            guidelines=settings.compliance_guidelines,
+            draft=part,
+        )
+        raw = provider.generate(COMPLIANCE_SYSTEM_PROMPT, user_prompt)
+        results.append(_parse_judge_response(raw))
+
+    return {"compliance": _merge_judgments(results)}
+
+
+def _merge_judgments(results: list[dict]) -> dict:
+    """Combine per-chunk verdicts: passes only if every chunk passed; reasons
+    are the de-duplicated union across chunks."""
+    if len(results) == 1:
+        return results[0]
+    passed = all(r.get("passed", False) for r in results)
+    reasons: list[str] = []
+    for r in results:
+        for reason in r.get("reasons", []):
+            if reason not in reasons:
+                reasons.append(reason)
+    return {"passed": passed, "reasons": reasons}
 
 
 def _parse_judge_response(raw: str) -> dict:

@@ -25,5 +25,16 @@ beautifulsoup4>=4.12.0
 # Config / env
 python-dotenv>=1.0.0
 
+# Web search (DuckDuckGo -- no API key required)
+ddgs==9.14.4
+
+# Frontend (Streamlit UI for testing the pipeline)
+streamlit>=1.35.0
+
+# Backend API for the React frontend (server/) -- node-by-node SSE streaming,
+# SQLite persistence of generated posts served at /blog_N
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
 # Tests
 pytest>=8.0.0

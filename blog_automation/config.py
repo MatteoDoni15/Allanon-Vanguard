@@ -17,7 +17,7 @@ load_dotenv()
 @dataclass
 class Settings:
     # --- LLM provider -------------------------------------------------
-    # "anthropic" | "openai" | "mock"
+    # "anthropic" | "openai" | "ollama" | "mock"
     # "mock" requires no API key and is used for local development,
     # CI tests, and the demo run included with this submission.
     llm_provider: str = os.getenv("LLM_PROVIDER", "mock")
@@ -25,6 +25,35 @@ class Settings:
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2200"))
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.6"))
+
+    # --- Input-token budgeting (see src/token_budget.py) ----------------
+    # `max_tokens` above bounds the *output*; these bound what we *send in*,
+    # so an oversized web-research context or draft can never blow the model's
+    # input window. They are deliberately generous defaults -- tighten per
+    # model via env vars (e.g. a small local Ollama model with an 8k window).
+    max_input_tokens: int = int(os.getenv("LLM_MAX_INPUT_TOKENS", "6000"))
+    # Budget for the DuckDuckGo web-research context injected into the
+    # content-generation prompt; compressed/summarised above this.
+    max_context_tokens: int = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "1200"))
+    # Budget for the draft handed to the compliance judge; above this the draft
+    # is chunked and judged chunk-by-chunk (never summarised, which could hide
+    # a violation).
+    max_compliance_draft_tokens: int = int(os.getenv("LLM_MAX_COMPLIANCE_DRAFT_TOKENS", "4000"))
+    # When True, oversized context is summarised abstractively via the LLM
+    # (chunk -> summarise -> combine). When False (default), the deterministic,
+    # offline extractive summariser is used -- no extra cost or latency.
+    summarizer_use_llm: bool = os.getenv("SUMMARIZER_USE_LLM", "false").lower() == "true"
+    summarizer_chunk_tokens: int = int(os.getenv("SUMMARIZER_CHUNK_TOKENS", "800"))
+
+    # --- Ollama (local models) -----------------------------------------
+    # Smart routing: each pipeline task uses the model best suited for it.
+    #   content    → gemma4:e2b   (largest, best at long-form writing)
+    #   compliance → granite4.1:3b (IBM enterprise model, structured JSON output)
+    #   default    → qwen2.5:1.5b  (smallest/fastest, used for anything else)
+    ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    ollama_content_model: str = os.getenv("OLLAMA_CONTENT_MODEL", "gemma4:e2b")
+    ollama_compliance_model: str = os.getenv("OLLAMA_COMPLIANCE_MODEL", "granite4.1:3b")
+    ollama_default_model: str = os.getenv("OLLAMA_DEFAULT_MODEL", "qwen2.5:1.5b")
 
     # --- Company / brand context ---------------------------------------
     company_name: str = os.getenv("COMPANY_NAME", "NorthLedger Finance")

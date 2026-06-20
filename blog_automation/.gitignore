@@ -4,3 +4,10 @@ outputs/*.json
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# React frontend
+web/node_modules/
+web/dist/
+
+# Local SQLite store of generated blogs
+server/blogs.db

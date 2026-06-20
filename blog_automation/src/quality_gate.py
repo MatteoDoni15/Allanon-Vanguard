@@ -63,6 +63,11 @@ def run_quality_gate(state: PipelineState) -> dict:
     if not fact_check.get("passed", True):
         reasons.extend(fact_check.get("reasons", []))
 
+    # 5b. External web fact-check via DuckDuckGo (run_web_fact_check).
+    web_fact_check = state.get("web_fact_check", {"passed": True, "reasons": []})
+    if not web_fact_check.get("passed", True):
+        reasons.extend(web_fact_check.get("reasons", []))
+
     # 6. Semantic duplicate check against published posts (Part 3, proposal 5).
     duplicate_check = state.get("duplicate_check", {"passed": True, "reasons": []})
     if not duplicate_check.get("passed", True):

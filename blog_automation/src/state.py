@@ -46,6 +46,9 @@ class PipelineState(TypedDict, total=False):
     importance_tier: str             # "standard" | "high" -- tagged at keyword input
     voice_profile: str                # internal style profile id, fixed across retries
 
+    # --- web research (DuckDuckGo snippets fetched before content generation) --
+    web_research_context: str
+
     # --- content generation ------------------------------------------------
     raw_markdown: str
     title: str
@@ -63,6 +66,9 @@ class PipelineState(TypedDict, total=False):
 
     # --- lightweight RAG fact-check against company policies (Part 3 proposal 2) --
     fact_check: QualityResult
+
+    # --- external web fact-check via DuckDuckGo (after policy fact-check) ----
+    web_fact_check: QualityResult
 
     # --- semantic duplicate detection against published posts (Part 3 proposal 5) --
     duplicate_check: QualityResult

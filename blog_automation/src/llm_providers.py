@@ -8,10 +8,15 @@ open-weights model later) means writing one small adapter class, with
 zero changes to content_generator.py, the LangGraph nodes, or anything
 downstream.
 
-Three providers ship out of the box:
+Four providers ship out of the box:
   - AnthropicProvider: calls Claude via the official `anthropic` SDK.
   - OpenAIProvider:    calls GPT via the official `openai` SDK (optional
                         dependency -- only imported if actually selected).
+  - OllamaProvider:    calls a local Ollama instance via its HTTP API
+                        (no API key required). Supports smart per-task
+                        model routing: gemma4 for content generation,
+                        granite for compliance judgment, qwen for
+                        everything else. See config.py for model names.
   - MockProvider:      deterministic, template-based generator that needs
                         no API key and no network call. Used for local
                         dev, unit tests, and the demo run shipped with
@@ -154,6 +159,50 @@ class OpenAIProvider(LLMProvider):
             ],
         )
         return response.choices[0].message.content
+
+
+class OllamaProvider(LLMProvider):
+    """
+    Calls a local Ollama instance via its /api/chat HTTP endpoint.
+    No API key or extra package required -- uses `requests` (already a
+    pipeline dependency).
+
+    Smart model routing (overridable via config / env vars):
+      task="content"    → ollama_content_model    (gemma4:e2b by default)
+      task="compliance" → ollama_compliance_model (granite4.1:3b by default)
+      task=anything     → ollama_default_model    (qwen2.5:1.5b by default)
+    """
+
+    _TASK_MODEL_MAP = {
+        "content": "ollama_content_model",
+        "compliance": "ollama_compliance_model",
+    }
+
+    def __init__(self, task: str | None = None, model: str | None = None):
+        import requests as _requests  # already in requirements.txt
+        self._requests = _requests
+        config_key = self._TASK_MODEL_MAP.get(task or "", "ollama_default_model")
+        self._model = model or getattr(settings, config_key)
+        self._url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        payload = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "stream": False,
+            "options": {"temperature": settings.temperature},
+        }
+        try:
+            resp = self._requests.post(self._url, json=payload, timeout=120)
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ollama request to {self._url} failed (model={self._model}): {exc}"
+            ) from exc
 
 
 class MockProvider(LLMProvider):
@@ -307,13 +356,23 @@ def _mock_compliance_judgment(user_prompt: str) -> str:
 _PROVIDERS = {
     "anthropic": AnthropicProvider,
     "openai": OpenAIProvider,
+    "ollama": OllamaProvider,
     "mock": MockProvider,
 }
 
 
-def get_llm_provider(name: str | None = None) -> LLMProvider:
-    """Factory: returns the configured provider. Defaults to settings.llm_provider."""
+def get_llm_provider(name: str | None = None, task: str | None = None) -> LLMProvider:
+    """Factory: returns the configured provider. Defaults to settings.llm_provider.
+
+    `task` is used by OllamaProvider to pick the right local model:
+      "content"    → gemma4:e2b   (long-form content generation)
+      "compliance" → granite4.1:3b (structured JSON compliance judgment)
+      None / other → qwen2.5:1.5b  (fast default)
+    Other providers ignore `task` and always use their configured model.
+    """
     name = (name or settings.llm_provider).lower()
     if name not in _PROVIDERS:
         raise ValueError(f"Unknown LLM provider '{name}'. Choose one of {list(_PROVIDERS)}.")
+    if name == "ollama":
+        return OllamaProvider(task=task)
     return _PROVIDERS[name]()

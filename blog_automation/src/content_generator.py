@@ -15,6 +15,7 @@ from config import settings
 from src.state import PipelineState
 from src.llm_providers import get_llm_provider
 from src.voice_profiles import get_voice_directive
+from src.token_budget import compress_to_budget, estimate_tokens, truncate_to_budget
 
 SYSTEM_PROMPT_TEMPLATE = """\
 You are a senior content writer for {company}, a company in the \
@@ -38,6 +39,7 @@ USER_PROMPT_TEMPLATE = """\
 TARGET_KEYWORD: {keyword}
 TARGET_AUDIENCE: {audience}
 
+{web_context_section}\
 Write a complete, publish-ready blog post optimized for the target \
 keyword above. Include:
 1. An H1 title containing the keyword.
@@ -51,7 +53,7 @@ keyword above. Include:
 
 def generate_content(state: PipelineState) -> dict:
     """LangGraph node: produces `raw_markdown` and `title` from `keyword`."""
-    provider = get_llm_provider()
+    provider = get_llm_provider(task="content")
 
     revision_note = ""
     if state.get("quality", {}).get("reasons"):
@@ -77,11 +79,32 @@ def generate_content(state: PipelineState) -> dict:
         max_words=settings.max_word_count,
     )
 
+    web_ctx = state.get("web_research_context", "").strip()
+    if web_ctx:
+        # Bound the most unbounded input: the web-research snippets. If they
+        # exceed the context budget they are chunked and summarised down to it
+        # (abstractively via the LLM if enabled, else extractively) so the
+        # prompt always fits the model's input window.
+        web_ctx = compress_to_budget(web_ctx, settings.max_context_tokens)
+    web_context_section = (
+        f"CURRENT WEB CONTEXT (recent snippets from DuckDuckGo -- use as "
+        f"background only, do not copy verbatim):\n{web_ctx}\n\n"
+        if web_ctx else ""
+    )
+
     user_prompt = USER_PROMPT_TEMPLATE.format(
         keyword=state["keyword"],
         audience=state.get("target_audience", "general retail banking customers"),
+        web_context_section=web_context_section,
         revision_note=revision_note,
     )
+
+    # Final safety guard: keep system + user prompt within the overall input
+    # budget, trimming the (most compressible) user prompt if a long revision
+    # note plus context still pushes us over.
+    overflow = estimate_tokens(system_prompt) + estimate_tokens(user_prompt) - settings.max_input_tokens
+    if overflow > 0:
+        user_prompt = truncate_to_budget(user_prompt, estimate_tokens(user_prompt) - overflow)
 
     markdown = provider.generate(system_prompt, user_prompt)
     title = _extract_title(markdown, fallback=state["keyword"].title())
