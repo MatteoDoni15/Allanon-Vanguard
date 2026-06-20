@@ -39,6 +39,33 @@ export async function deleteBlog(id) {
   return res.json();
 }
 
+export async function fetchPolicies() {
+  const res = await fetch("/api/policies");
+  if (!res.ok) throw new Error("Impossibile leggere le policy");
+  return (await res.json()).policies;
+}
+
+export async function addPolicy(body) {
+  const res = await fetch("/api/policies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "Creazione policy fallita");
+  }
+  return res.json();
+}
+
+export async function deletePolicy(docId) {
+  const res = await fetch(`/api/policies/${encodeURIComponent(docId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Eliminazione policy fallita");
+  return res.json();
+}
+
 // Open the SSE stream for a job. Calls onEvent(payload) for every event and
 // returns the EventSource so the caller can close it.
 export function openJobStream(jobId, onEvent, onDone) {

@@ -47,6 +47,8 @@ from pydantic import BaseModel
 from config import settings
 from src.logging_config import configure_logging, get_logger
 from server import db
+from src import policy_store
+from src.vector_index import reset_knowledge_base_index
 from src.pipeline_graph import NODE_LABELS, NODE_ORDER, stream_for_keyword
 
 configure_logging()
@@ -85,6 +87,11 @@ class GenerateRequest(BaseModel):
     api_key: str | None = None
     ollama_url: str | None = None
     target_audience: str = "general retail banking customers"
+
+
+class PolicyRequest(BaseModel):
+    title: str
+    text: str
 
 
 def _apply_provider(req: GenerateRequest) -> None:
@@ -247,6 +254,34 @@ def remove_blog(blog_id: int) -> dict:
         raise HTTPException(404, "Blog not found")
     logger.info(f"API: Successfully deleted blog {blog_id}")
     return {"deleted": blog_id}
+
+
+@app.get("/api/policies")
+def get_policies() -> dict:
+    logger.info("API: Fetching company policies")
+    return {"policies": policy_store.list_policies()}
+
+
+@app.post("/api/policies")
+def create_policy(req: PolicyRequest) -> dict:
+    if not req.title.strip() or not req.text.strip():
+        logger.warning("API: Policy title or text missing")
+        raise HTTPException(400, "Sia il titolo che il testo della policy sono obbligatori")
+    doc = policy_store.add_policy(req.title, req.text)
+    # The new policy must enter the vector space: refit on next pipeline run.
+    reset_knowledge_base_index()
+    logger.info("API: Vector index reset -- will rebuild with new policy on next run")
+    return doc
+
+
+@app.delete("/api/policies/{doc_id}")
+def remove_policy(doc_id: str) -> dict:
+    logger.info(f"API: Deleting policy {doc_id}")
+    if not policy_store.delete_policy(doc_id):
+        raise HTTPException(404, "Policy non trovata")
+    reset_knowledge_base_index()
+    logger.info("API: Vector index reset -- will rebuild without the policy on next run")
+    return {"deleted": doc_id}
 
 
 @app.on_event("startup")

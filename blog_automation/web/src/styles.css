@@ -35,6 +35,9 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 }
 .brand { font-weight: 600; font-size: 16px; color: var(--text); }
 .brand-sub, .topbar-hint { color: var(--muted); font-weight: 400; }
+.topbar-nav { display: flex; gap: 16px; margin-left: 24px; margin-right: auto; }
+.topbar-nav a { color: var(--muted); font-size: 14px; }
+.topbar-nav a:hover { color: var(--text); text-decoration: none; }
 .content { padding: 20px; }
 
 /* ── generate page 3-column layout ── */
@@ -209,3 +212,26 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .step-items { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 .step-items li { margin-bottom: 3px; word-break: break-word; }
+
+/* ── policies page ── */
+.policies-layout { grid-template-columns: 380px 1fr; }
+@media (max-width: 1100px) { .policies-layout { grid-template-columns: 1fr; } }
+.examples-title { font-size: 13px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.example-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.example-btn {
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.example-btn:hover { background: #262b35; border-color: var(--accent); }
+.policy-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.policy-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.policy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.policy-id { display: inline-block; margin: 4px 0 8px; font-size: 11px; color: var(--muted); }
+.policy-text { margin: 0; line-height: 1.6; font-size: 13px; }

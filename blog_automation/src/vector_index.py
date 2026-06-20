@@ -171,3 +171,16 @@ def get_knowledge_base_index() -> KnowledgeBaseIndex:
         _INDEX.load_policies_from_file()
         _INDEX.build()
     return _INDEX
+
+
+def reset_knowledge_base_index() -> None:
+    """Drop the cached index so the next get_knowledge_base_index() rebuilds it.
+
+    Called after the policy set changes (see policy_store): the LSA embedder is
+    fit once per build, so a newly added policy only becomes retrievable -- and
+    its vocabulary only enters the vector space -- after a fresh rebuild. The
+    rebuild happens lazily on the next pipeline run, which (in the server) holds
+    the generation lock, so it never races a run already in flight.
+    """
+    global _INDEX
+    _INDEX = None

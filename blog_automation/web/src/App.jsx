@@ -8,6 +8,10 @@ export default function App() {
         <Link to="/" className="brand">
           ✍️ Blog Automation <span className="brand-sub">· tester</span>
         </Link>
+        <nav className="topbar-nav">
+          <Link to="/">Generatore</Link>
+          <Link to="/policies">📋 Policy</Link>
+        </nav>
         <span className="topbar-hint">NorthLedger Finance pipeline</span>
       </header>
       <main className="content">
