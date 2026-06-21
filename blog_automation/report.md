@@ -444,3 +444,44 @@ keyword
         └─ needs_review → review packet
   → [persist] SQLite (state_json + steps) → /blog_N
 ```
+
+---
+
+## 15. Feedback loop sull'engagement (Part 3, proposta 3)
+
+Oltre al *retry-con-feedback* della pipeline (che migliora **lo stesso post**),
+esiste un secondo loop, separato, che impara dai **risultati dei post già
+pubblicati** per decidere **cosa scrivere dopo**. Componenti:
+
+- **Tabella `feedback`** (`server/db.py`) — una riga per ogni invio di metriche
+  (`impressions`, `clicks`, `avg_time_sec`, `conversions`) legata a un blog.
+- **Endpoint** — `POST /api/feedback` (salva le metriche), `POST
+  /api/keyword-priorities` (ricalcola le priorità).
+- **Algoritmo** (`src/keyword_priority.py`) — `engagement_score` (CTR-dominante),
+  punteggi **centrati sulla media** (sopra-media → peso positivo, sotto-media →
+  negativo), e priorità di ogni keyword candidata = somma pesata per similarità
+  (TF-IDF + cosine, la stessa dell'internal linking) verso i post storici. Ogni
+  risultato porta una motivazione in linguaggio naturale.
+- **Frontend** — `web/src/pages/FeedbackPage.jsx` per inserire metriche e vedere
+  le keyword future ri-classificarsi.
+
+**Guardrail**: il loop tara *cosa scrivere dopo*, **mai** le soglie di compliance
+(restano umane: un CTR alto non può mai convincere il sistema a un claim più
+rischioso).
+
+### ⚠️ Limite attuale e cosa serve in produzione
+
+**Le metriche di engagement sono inserite a mano, non raccolte in automatico.**
+Non esiste un'integrazione che tiri giù impressions/click reali da **Google
+Analytics (GA4)**, **Google Search Console (GSC)** o dal **CMS**: nel prototipo
+(e nella demo) le metriche si digitano via UI/API. Di conseguenza il sistema è
+testato **solo su dati fittizi**.
+
+Quello che è reale è il **meccanismo di apprendimento** (lo scoring e il
+ri-ranking funzionano e sono testati); quello che **manca** è l'**ingestione
+automatica delle metriche reali**. Per un progetto serio / in produzione
+andrebbe aggiunto un connettore che, su base schedulata, importi
+automaticamente le metriche reali da **GA4 / GSC / CMS** e le scriva nella
+tabella `feedback`, chiudendo il loop senza intervento manuale. Solo a quel
+punto il loop dimostrerebbe un **aumento reale di engagement** e non solo la
+correttezza del meccanismo.

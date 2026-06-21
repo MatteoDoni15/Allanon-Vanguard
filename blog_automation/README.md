@@ -18,8 +18,8 @@ here versus left as a costed proposal in the submitted report.
 pip install -r requirements.txt
 python main.py                     # runs 3 demo keywords in mock mode, no API key needed
 python main.py "high-yield savings accounts" "roth ira contribution limits"
-python main.py --file keywords.txt
-pytest tests/ -v                   # 30 unit tests across SEO, linking, compliance, fact-checking, routing
+python main.py --file keywords_example.txt
+pytest tests/ -v                   # 36 unit tests across SEO, linking, compliance, fact-checking, token budgeting, routing
 ```
 
 By default `LLM_PROVIDER=mock`, so the whole pipeline (generation -> SEO ->
@@ -150,12 +150,14 @@ blog_automation/
 ├── config.py                 # all tunable thresholds, env-driven
 ├── requirements.txt
 ├── .env.example
+├── keywords_example.txt      # sample keyword list for --file
+├── run.ps1                   # one-shot launcher for backend + frontend
 ├── data/
 │   ├── existing_site_content.json   # mock CMS export for internal linking
 │   └── company_policies.json         # mock policy corpus for fact-checking
 ├── src/
 │   ├── state.py               # shared LangGraph state schema
-│   ├── llm_providers.py        # Anthropic / OpenAI / Mock, pluggable
+│   ├── llm_providers.py        # Anthropic / OpenAI / Ollama / Mock, pluggable
 │   ├── embeddings.py            # LSA (default) / Voyage (production shape)
 │   ├── voice_profiles.py        # internal writer-voice profiles
 │   ├── importance_tagger.py     # high/standard topic-importance tagging
@@ -165,10 +167,20 @@ blog_automation/
 │   ├── compliance_judge.py      # LLM-as-judge compliance node
 │   ├── vector_index.py           # Qdrant local-mode index (2 collections)
 │   ├── policy_fact_check.py      # lightweight RAG fact-check node
+│   ├── policy_store.py          # CRUD write-path for company policies
+│   ├── web_research.py          # DuckDuckGo context retrieval (non-blocking)
+│   ├── web_fact_check.py        # DuckDuckGo external claim verification
 │   ├── semantic_duplicate_check.py
+│   ├── keyword_priority.py      # feedback loop: re-rank keywords by engagement
+│   ├── token_budget.py          # input-token budgeting / chunking
 │   ├── quality_gate.py           # risk-tiered publish/retry/review routing
 │   ├── publisher.py
+│   ├── logging_config.py
 │   └── pipeline_graph.py        # the LangGraph wiring
+├── server/                    # FastAPI backend (HTTP + SSE) + SQLite persistence
+│   ├── app.py
+│   └── db.py
+├── web/                       # React + Vite SPA (Generate / Blog / Policies / Feedback)
 ├── outputs/                   # generated HTML + JSON manifests land here
 └── tests/
     ├── test_seo_optimizer.py
@@ -176,5 +188,6 @@ blog_automation/
     ├── test_voice_and_importance.py
     ├── test_compliance_judge.py
     ├── test_vector_index.py
+    ├── test_token_budget.py
     └── test_quality_gate_routing.py
 ```

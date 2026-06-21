@@ -137,7 +137,7 @@ with what I'd actually do in production (full detail: Design Doc, Appendix C):
 
 | Prototype (now) | Production (real deployment) |
 |---|---|
-| **DuckDuckGo** search (free, key-less) | **Brave Search API**, or aggressive full-page **crawling/scraping** (Firecrawl/Crawl4AI-style) |
+| **DuckDuckGo** search (free, key-less); keywords given as input | **News-driven keyword discovery (Brave Search API)** + full-page **crawling/scraping** of trusted sources (Crawl4AI/Firecrawl-style, open source) |
 | Tested only with **`qwen2.5:1.5b`** locally (only good model my PC runs) | Hosted **Claude/GPT** — config switch, not code; quality not proven here |
 | **scikit-learn LSA** embeddings (avoid adding a model) | **Voyage `voyage-finance-2`** / neural embedder — LSA never used with a big corpus |
 | **No classifier** — LLM-as-judge (no labelled data yet) | Train a **cheaper, more accurate classifier** once the **post DB** has built up history |
@@ -157,7 +157,7 @@ with what I'd actually do in production (full detail: Design Doc, Appendix C):
 | RAG fact-check (LSA) | Threshold tuning / generation guidance |
 | Risk-tiered gate + human review | Managed Qdrant, multi-worker fleet |
 | Feedback loop (keyword re-ranking) | Compliance classifier (needs more data) |
-| Semantic dedup, 30 unit tests | |
+| Semantic dedup, 36 unit tests | |
 
 > Close: "It runs end-to-end today with zero setup, and every gap is a labelled
 > proposal — not a hidden assumption. In a compliance context, knowing exactly
@@ -184,4 +184,9 @@ with what I'd actually do in production (full detail: Design Doc, Appendix C):
   have at day zero. The post DB is accumulating exactly that history; once it's
   big enough, a classifier replaces the LLM judge — cheaper and more accurate.
 - **Why DuckDuckGo and not a real search API?** Free and key-less, enough to
-  prove the pattern. Production = Brave Search API or heavy crawling/scraping.
+  prove the pattern. Production = Brave Search API (incl. news-driven keyword
+  *discovery*, which the prototype doesn't do — it only re-ranks given keywords)
+  plus full-page scraping of trusted sources via an open-source crawler
+  (Crawl4AI/Firecrawl-style). I prototyped the scraping path and tested reading
+  pages with local Gemma (4B/2B) on Ollama, but my machine errored on the larger
+  context — so I left it as a proposal rather than commit untested code.

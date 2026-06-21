@@ -54,6 +54,16 @@ node in a LangGraph state machine (Part 4).
 | 6 | **Quality gate & routing** | One decision: auto-publish, retry-with-feedback, or escalate to a human. | Thresholds in config; bounded retry loop; risk-tier override. |
 | 7 | **Publishing automation** | Convert to HTML, attach SEO/canonical/disclosure metadata, schedule, and publish (or write a review packet). | CMS API (WordPress REST example); scheduling window; AI-disclosure; dry-run mode for testing. |
 
+> **Scope note on Step 0 — keyword *discovery* vs keyword *input*.** The prototype
+> takes the target keyword as **input** (file / CLI / queue) and the feedback loop
+> (Part 3, Proposal 3) *re-ranks* an existing candidate set by past engagement. It
+> does **not** actively *discover* new topics. Active discovery — surfacing trending
+> FinTech topics from a **news search (Brave Search API)** or by **scraping known
+> trusted sources** — is a deliberate, costed proposal (see Appendix C.1), left out
+> of the running code for cost/stability reasons, not difficulty. This is the one
+> Part-1 step with no active counterpart in code, and it is called out here rather
+> than left implicit.
+
 ---
 
 ## Part 2 — What is implemented in Python
@@ -63,8 +73,8 @@ linking as a plus. **All of steps 1–7 are implemented and runnable.** The
 project runs end-to-end with **zero setup and zero API cost** in `mock` mode
 (a deterministic content generator), so the entire flow — generation → SEO →
 linking → compliance → gate → publish — can be exercised and unit-tested
-without any key. 30 unit tests cover SEO, linking, compliance parsing, the
-vector index, and the routing logic.
+without any key. 36 unit tests cover SEO, linking, compliance parsing, the
+vector index, token budgeting, and the routing logic.
 
 Key modules (full table in `README.md`, deep dive in `report.md`):
 
@@ -72,8 +82,11 @@ Key modules (full table in `README.md`, deep dive in `report.md`):
   `LLMProvider` interface (`src/llm_providers.py`): Anthropic (default), OpenAI,
   Ollama (local, per-task model routing), and Mock. Swapping providers is a
   config change, not a code change.
-- **SEO** — `src/seo_optimizer.py`: pure-Python (no paid SEO SaaS), so it costs
-  nothing per post at 700/month.
+- **SEO** — `src/seo_optimizer.py`: pure-Python **on-page** SEO (readability,
+  keyword density, heading structure, meta title/description, slug) — no paid SEO
+  SaaS, so it costs nothing per post at 700/month. It deliberately does **not**
+  cover off-page / SERP factors (search volume, competitor gap, backlinks): those
+  belong to the keyword-discovery layer (Appendix C.1), not to per-post scoring.
 - **Internal linking** — `src/internal_linking.py`: TF-IDF + cosine similarity
   (scikit-learn) against `data/existing_site_content.json`.
 - **Compliance & fact-check** — `src/compliance_judge.py`,
@@ -164,6 +177,16 @@ The lowest-risk lever of the loop is now **running code**:
 - **Guardrail:** the loop tunes *what to write next*, **never compliance**.
   Compliance thresholds stay human-owned; a click-through metric is never allowed
   to talk the system into a riskier claim.
+- **Missing piece — automatic metric ingestion:** the engagement metrics are
+  **entered by hand** (via the UI / `POST /api/feedback`), not pulled
+  automatically. There is **no integration that ingests real impressions/clicks
+  from Google Analytics (GA4), Google Search Console (GSC), or the CMS** — which
+  is also why it can only be tested on fake data today. The *learning mechanism*
+  is real; the *automatic ingestion of real metrics* is the missing piece. For a
+  serious / production deployment I would add a scheduled connector that imports
+  real metrics from **GA4 / GSC / the CMS** into the `feedback` table, closing the
+  loop with no manual step — only then does it prove a real engagement uplift
+  rather than just the correctness of the mechanism.
 - **Two further levers, still proposed** (need more data / production wiring):
   - **Threshold tuning** — replace fixed guesses (the publish-time window in
     `config.py`, the SEO cut-off) with A/B-tested learned values.
@@ -289,8 +312,10 @@ has to guard against for very short or off-topic text.
 
 - **Embeddings are LSA, not neural** — see Proposal 2. The pattern is real; the
   accuracy is not production-grade.
-- **No real engagement data** — the feedback loop (Proposal 3) is a design, not
-  code.
+- **No real engagement data** — the feedback loop (Proposal 3) is implemented as
+  a minimal-but-real mechanism (keyword re-ranking), but it is **tested only on
+  fake metrics**: it proves the mechanism, not a real engagement uplift, which
+  needs production traffic.
 - **Mock policy corpus** — `company_policies.json` is illustrative; production
   needs real documents (Docling ingestion).
 - **In-process index** — fine for a prototype / single batch; production needs a
@@ -312,20 +337,36 @@ with zero setup**. Each is the *right* call for a take-home prototype and the
 actually do in production. Stating the delta explicitly is the point: nothing
 here is a hidden assumption.
 
-### C.1 Web research — DuckDuckGo now, Brave Search API / heavy scraping in prod
+### C.1 Web research & keyword discovery — DuckDuckGo now, news search / scraping in prod
 
 - **Prototype:** web research and the web fact-check use the **DuckDuckGo** Python
   client (`ddgs`) because it is a working, **free, key-less** service — good
   enough to prove the retrieval-and-inject pattern end to end.
-- **Production:** I would not rely on it. Two better options, by ambition:
-  - **Brave Search API** — a paid, stable, ToS-clean search API with proper rate
-    limits and result quality, the low-risk default for a company.
-  - **An aggressive crawling/scraping approach** (Firecrawl / Crawl4AI-style):
-    heavily crawl and **parse full pages**, not just snippets, to ground the draft
-    in much richer, fresher source material. Higher cost and maintenance, but the
-    strongest grounding signal.
-- **Why it matters:** the quality of the web-grounded facts is capped by the
-  search layer; DuckDuckGo snippets are the floor, not the ceiling.
+- **Production — two complementary upgrades, both deliberately left out of the
+  prototype for cost/stability reasons, not difficulty:**
+  - **News-driven keyword discovery.** Today the pipeline takes keywords as input
+    (file / CLI / queue) and the feedback loop only *re-ranks* an existing
+    candidate set; it does not *discover* fresh topics. In production I would feed
+    the candidate set from a **news search via the Brave Search API** (a paid,
+    stable, ToS-clean API with proper rate limits and result quality — the
+    low-risk default for a company), surfacing trending FinTech topics worth
+    writing about before they are ranked by the feedback loop.
+  - **Full-page scraping for grounding.** Instead of snippets, **crawl and parse
+    full pages** — either from open search results or from a curated list of
+    known, trusted sources — using an **open-source crawler of the Crawl4AI /
+    Firecrawl family** (open source, so production is "add the dependency and wire
+    it in", not a rewrite). This grounds the draft in much richer, fresher source
+    material than snippets allow.
+- **Why it is a proposal and not code here:** the scraping path was prototyped but
+  **not committed**. I tested reading the scraped pages with **local Gemma models
+  (4B and 2B) via Ollama**, but my machine ran out of resources / errored on the
+  larger context, so rather than ship code I could not actually run end to end I
+  left it as a costed proposal. The principle holds throughout this submission:
+  **no untested code in the repo.** Brave Search is likewise a paid API I did not
+  want to key in for a take-home.
+- **Why it matters:** the quality of the web-grounded facts — and of the topic
+  selection itself — is capped by the search/crawl layer; DuckDuckGo snippets are
+  the floor, not the ceiling.
 
 ### C.2 LLM — tested locally with one small model only
 
