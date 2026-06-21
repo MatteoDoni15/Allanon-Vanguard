@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 
-import { fetchBlog } from "../api.js";
+import { fetchBlog, approveBlog } from "../api.js";
 
 // The route matches the whole segment (":slug"); we accept /blog_1 and parse
 // the trailing number. Anything that isn't blog_<n> is treated as not found.
@@ -15,6 +15,22 @@ export default function BlogPage() {
   const id = parseId(slug);
   const [blog, setBlog] = useState(undefined); // undefined=loading, null=not found
   const [error, setError] = useState("");
+  const [approving, setApproving] = useState(false);
+
+  async function onApprove() {
+    if (approving) return;
+    setApproving(true);
+    setError("");
+    try {
+      await approveBlog(id);
+      const fresh = await fetchBlog(id);
+      setBlog(fresh);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setApproving(false);
+    }
+  }
 
   useEffect(() => {
     if (id === null) {
@@ -70,6 +86,24 @@ export default function BlogPage() {
           <span className={"badge " + (blog.status === "published" ? "green" : "yellow")}>
             {blog.status}
           </span>
+
+          {blog.status === "needs_review" && (
+            <div className="review-box">
+              <p className="muted">
+                Questo post è stato instradato alla revisione umana. Dopo il
+                controllo, approvalo per pubblicarlo.
+              </p>
+              <button className="primary" onClick={onApprove} disabled={approving}>
+                {approving ? "Approvazione…" : "✅ Approva e pubblica"}
+              </button>
+            </div>
+          )}
+          {state.review?.approved_by && (
+            <p className="muted">
+              Approvato da <b>{state.review.approved_by}</b> ·{" "}
+              {state.review.approved_at?.slice(0, 16)}
+            </p>
+          )}
 
           <h3>SEO</h3>
           <ul className="kv">

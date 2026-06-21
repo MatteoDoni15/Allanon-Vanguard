@@ -112,14 +112,23 @@ running code:
   (`*.review.html` / `*.review.manifest.json`) instead of just flipping a
   status flag.
 
+- **Feedback loop** (`src/keyword_priority.py`, `server/db.py` feedback table,
+  `web/src/pages/FeedbackPage.jsx`): engagement metrics attached to past posts
+  re-rank future keywords by similarity to what performed (TF-IDF + cosine, the
+  same machinery as internal linking). Implemented as a minimal-but-real
+  mechanism and tested with fake metrics — it proves the loop, not a real
+  engagement uplift (which needs production traffic). Tunes *what to write next*,
+  never compliance.
+
 What remains a costed proposal in the report rather than code: Voyage AI's
 finance-tuned embeddings and IBM Granite Guardian specifically (both need
 an API key/model host this sandbox cannot provide), Docling for ingesting
 real (as opposed to mock) policy PDFs, a Neo4j extension for claims that
-depend on multiple interacting conditions, and the engagement/audit
-feedback loop (which needs real production traffic data to mean anything).
-See the submitted report (Part 3 and Appendix A) for the full reasoning
-and the alternatives considered for each.
+depend on multiple interacting conditions, the two heavier feedback-loop
+levers (threshold tuning and generation guidance), and a trained compliance
+classifier (which needs the post/engagement history to accumulate first).
+See the submitted report (`DESIGN_DOCUMENT.md`, Part 3 and Appendix A) for
+the full reasoning and the alternatives considered for each.
 
 ## Scaling to 700 posts/month
 

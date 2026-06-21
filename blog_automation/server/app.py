@@ -49,6 +49,7 @@ from src.logging_config import configure_logging, get_logger
 from server import db
 from src import policy_store
 from src.vector_index import reset_knowledge_base_index
+from src.keyword_priority import compute_keyword_priorities
 from src.pipeline_graph import NODE_LABELS, NODE_ORDER, stream_for_keyword
 
 configure_logging()
@@ -92,6 +93,18 @@ class GenerateRequest(BaseModel):
 class PolicyRequest(BaseModel):
     title: str
     text: str
+
+
+class FeedbackRequest(BaseModel):
+    blog_id: int
+    impressions: int = 0
+    clicks: int = 0
+    avg_time_sec: float = 0.0
+    conversions: int = 0
+
+
+class PriorityRequest(BaseModel):
+    candidates: list[str]
 
 
 def _apply_provider(req: GenerateRequest) -> None:
@@ -246,6 +259,17 @@ def get_blog(blog_id: int) -> dict:
     return blog
 
 
+@app.post("/api/blogs/{blog_id}/approve")
+def approve_blog(blog_id: int) -> dict:
+    """Human-in-the-loop sign-off: a reviewer approves a needs_review post."""
+    logger.info(f"API: Approving (human review) blog {blog_id}")
+    if not db.approve_blog(blog_id):
+        logger.warning(f"API: Blog {blog_id} not found or not awaiting review")
+        raise HTTPException(409, "Blog non trovato o non in attesa di revisione")
+    logger.info(f"API: Blog {blog_id} approved -> published")
+    return {"approved": blog_id, "status": "published"}
+
+
 @app.delete("/api/blogs/{blog_id}")
 def remove_blog(blog_id: int) -> dict:
     logger.info(f"API: Deleting blog {blog_id}")
@@ -282,6 +306,38 @@ def remove_policy(doc_id: str) -> dict:
     reset_knowledge_base_index()
     logger.info("API: Vector index reset -- will rebuild without the policy on next run")
     return {"deleted": doc_id}
+
+
+# --- Feedback loop (Part 3, proposal 3) --------------------------------------
+
+@app.post("/api/feedback")
+def submit_feedback(req: FeedbackRequest) -> dict:
+    if db.get_blog(req.blog_id) is None:
+        logger.warning(f"API: Feedback for unknown blog {req.blog_id}")
+        raise HTTPException(404, "Blog non trovato")
+    fid = db.save_feedback(
+        req.blog_id, req.impressions, req.clicks, req.avg_time_sec, req.conversions
+    )
+    logger.info(
+        f"API: Stored feedback {fid} for blog {req.blog_id} "
+        f"(impressions={req.impressions}, clicks={req.clicks})"
+    )
+    return {"feedback_id": fid, "blog_id": req.blog_id}
+
+
+@app.get("/api/feedback")
+def get_feedback() -> dict:
+    logger.info("API: Fetching engagement feedback")
+    return {"feedback": db.list_feedback()}
+
+
+@app.post("/api/keyword-priorities")
+def keyword_priorities(req: PriorityRequest) -> dict:
+    logger.info(f"API: Computing keyword priorities for {len(req.candidates)} candidate(s)")
+    history = db.history_for_priority()
+    ranked = compute_keyword_priorities(req.candidates, history)
+    posts_with_data = sum(1 for h in history if h.get("metrics"))
+    return {"priorities": ranked, "history_posts_with_engagement": posts_with_data}
 
 
 @app.on_event("startup")

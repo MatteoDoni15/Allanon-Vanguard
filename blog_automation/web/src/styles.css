@@ -235,3 +235,17 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .policy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .policy-id { display: inline-block; margin: 4px 0 8px; font-size: 11px; color: var(--muted); }
 .policy-text { margin: 0; line-height: 1.6; font-size: 13px; }
+
+/* ── feedback page ── */
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 6px; margin-top: 8px; }
+.metric-grid input { width: 100%; min-width: 0; }
+.priority-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.priority-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.priority-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.priority-score { font-weight: 700; font-size: 15px; width: 32px; color: var(--accent); }
+.priority-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.priority-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+
+/* ── human-review approval ── */
+.review-box { margin: 10px 0; padding: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.review-box p { margin: 0 0 8px; font-size: 13px; }

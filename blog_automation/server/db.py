@@ -50,6 +50,25 @@ def init_db() -> None:
             )
             """
         )
+        # Engagement feedback per published post (Part 3, proposal 3 -- the
+        # feedback loop). One row per metrics submission; the latest row per
+        # blog is what the keyword-priority recompute reads. This table is the
+        # historical dataset that later lets a cheap classifier replace the LLM
+        # judge (see DESIGN_DOCUMENT Appendix C.4).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                blog_id       INTEGER NOT NULL,
+                impressions   INTEGER NOT NULL DEFAULT 0,
+                clicks        INTEGER NOT NULL DEFAULT 0,
+                avg_time_sec  REAL NOT NULL DEFAULT 0,
+                conversions   INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT NOT NULL,
+                FOREIGN KEY (blog_id) REFERENCES blogs(id) ON DELETE CASCADE
+            )
+            """
+        )
 
 
 def _render_html(markdown_text: str) -> str:
@@ -222,3 +241,116 @@ def delete_blog(blog_id: int) -> bool:
     with _connect() as conn:
         cur = conn.execute("DELETE FROM blogs WHERE id = ?", (blog_id,))
         return cur.rowcount > 0
+
+
+def approve_blog(blog_id: int, reviewer: str = "human reviewer") -> bool:
+    """Mark a needs_review blog as human-approved → published.
+
+    Updates both the top-level ``status`` column and the ``status`` inside the
+    saved ``state_json`` (the source of truth the detail page reads), and stamps
+    who approved it and when. Returns False if the blog doesn't exist or wasn't
+    actually awaiting review.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT status, state_json FROM blogs WHERE id = ?", (blog_id,)
+        ).fetchone()
+        if row is None or row["status"] != "needs_review":
+            return False
+        state = json.loads(row["state_json"] or "{}")
+        state["status"] = "published"
+        state["review"] = {
+            "approved_by": reviewer,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+        }
+        conn.execute(
+            "UPDATE blogs SET status = ?, state_json = ? WHERE id = ?",
+            ("published", json.dumps(state, default=str), blog_id),
+        )
+        return True
+
+
+# --- Feedback loop (Part 3, proposal 3) ---------------------------------------
+
+def save_feedback(
+    blog_id: int,
+    impressions: int,
+    clicks: int,
+    avg_time_sec: float,
+    conversions: int = 0,
+) -> int:
+    """Store one engagement-metrics submission for a blog. Returns its row id."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO feedback (blog_id, impressions, clicks, avg_time_sec,
+                                  conversions, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(blog_id),
+                int(impressions),
+                int(clicks),
+                float(avg_time_sec),
+                int(conversions),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def list_feedback() -> list[dict[str, Any]]:
+    """Latest metrics per blog, joined with the blog's keyword/title."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT f.blog_id, b.keyword, b.title,
+                   f.impressions, f.clicks, f.avg_time_sec, f.conversions,
+                   f.created_at
+            FROM feedback f
+            JOIN blogs b ON b.id = f.blog_id
+            JOIN (
+                SELECT blog_id, MAX(id) AS max_id FROM feedback GROUP BY blog_id
+            ) latest ON latest.max_id = f.id
+            ORDER BY f.blog_id
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def history_for_priority() -> list[dict[str, Any]]:
+    """Past posts with their latest engagement metrics, for the keyword-priority
+    recompute. Posts with no feedback yet are included with ``metrics=None`` so
+    the caller can decide how to treat them (here: ignored in scoring)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT b.id AS blog_id, b.keyword, b.title,
+                   f.impressions, f.clicks, f.avg_time_sec, f.conversions
+            FROM blogs b
+            LEFT JOIN (
+                SELECT blog_id, MAX(id) AS max_id FROM feedback GROUP BY blog_id
+            ) latest ON latest.blog_id = b.id
+            LEFT JOIN feedback f ON f.id = latest.max_id
+            ORDER BY b.id
+            """
+        ).fetchall()
+    history: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        has_metrics = d.get("impressions") is not None
+        history.append({
+            "blog_id": d["blog_id"],
+            "keyword": d.get("keyword") or "",
+            "title": d.get("title") or "",
+            "metrics": (
+                {
+                    "impressions": d["impressions"],
+                    "clicks": d["clicks"],
+                    "avg_time_sec": d["avg_time_sec"],
+                    "conversions": d["conversions"],
+                }
+                if has_metrics else None
+            ),
+        })
+    return history

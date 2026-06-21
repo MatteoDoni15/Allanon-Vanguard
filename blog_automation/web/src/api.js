@@ -39,6 +39,15 @@ export async function deleteBlog(id) {
   return res.json();
 }
 
+export async function approveBlog(id) {
+  const res = await fetch(`/api/blogs/${id}/approve`, { method: "POST" });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "Approvazione fallita");
+  }
+  return res.json();
+}
+
 export async function fetchPolicies() {
   const res = await fetch("/api/policies");
   if (!res.ok) throw new Error("Impossibile leggere le policy");
@@ -64,6 +73,37 @@ export async function deletePolicy(docId) {
   });
   if (!res.ok) throw new Error("Eliminazione policy fallita");
   return res.json();
+}
+
+// --- Feedback loop (Part 3, proposal 3) ---
+
+export async function submitFeedback(body) {
+  const res = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "Invio metriche fallito");
+  }
+  return res.json();
+}
+
+export async function fetchFeedback() {
+  const res = await fetch("/api/feedback");
+  if (!res.ok) throw new Error("Impossibile leggere il feedback");
+  return (await res.json()).feedback;
+}
+
+export async function fetchKeywordPriorities(candidates) {
+  const res = await fetch("/api/keyword-priorities", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ candidates }),
+  });
+  if (!res.ok) throw new Error("Calcolo priorità fallito");
+  return res.json(); // { priorities, history_posts_with_engagement }
 }
 
 // Open the SSE stream for a job. Calls onEvent(payload) for every event and

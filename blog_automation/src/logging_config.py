@@ -17,6 +17,14 @@ def configure_logging(level: int = logging.INFO) -> logging.Logger:
     # Remove any existing handlers to avoid duplicates
     logger.handlers.clear()
 
+    # On Windows the console defaults to a legacy code page (cp1252) that can't
+    # encode characters like → or emoji; reconfigure stdout to replace rather
+    # than raise, so a stray non-ASCII char in a log message never crashes.
+    try:
+        sys.stdout.reconfigure(errors="replace")  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass
+
     # Console handler with readable format
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
