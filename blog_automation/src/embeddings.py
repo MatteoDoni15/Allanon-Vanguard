@@ -27,6 +27,9 @@ step up from raw TF-IDF, fully local, and already buildable from
 dependencies this project has. The design document's production
 recommendation (Voyage AI's voyage-finance-2) stands; this is the
 honest free/offline substitute for development and grading.
+The Voyage provider is included here to show the shape of the
+production call, but is not used by default and will raise a clear
+error if selected without an API key, rather than silently falling back.
 """
 
 from __future__ import annotations
